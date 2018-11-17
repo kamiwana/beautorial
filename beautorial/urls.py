@@ -25,7 +25,7 @@ admin.site.site_header = "BEAUTORIAL"
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    url(r'^account/', include('account.urls')),
+    url(r'^api/accounts/', include('account.urls')),
 ]
 
 if settings.DEBUG:

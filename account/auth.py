@@ -1,11 +1,11 @@
 from django.db.models import Q
 from .models import *
 
-class UsernameOrEmailBackend(object):
-    def authenticate(self, username=None, password=None, **kwargs):
+class user_idOrEmailBackend(object):
+    def authenticate(self, user_id=None, password=None, **kwargs):
         try:
-           # Try to fetch the user by searching the username or email field
-            user = User.objects.get(Q(username=username)|Q(email=username))
+           # Try to fetch the user by searching the user_id or email field
+            user = User.objects.get(Q(user_id=user_id)|Q(email=user_id))
             if user.check_password(password):
                 return user
         except User.DoesNotExist:
