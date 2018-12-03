@@ -1,13 +1,25 @@
 from django.contrib.auth.models import User
 from django.db import models
 from .choices import *
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin,BaseUserManager
+from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.utils.translation import ugettext_lazy as _
 from django.core.validators import RegexValidator
 from django.contrib.auth import models as auth_models
-from django.core.validators import validate_comma_separated_integer_list
+from django.core.validators import int_list_validator
 from imagekit.models import ProcessedImageField
 from imagekit.processors import ResizeToFill
+from post import models as post_models
+from rest_framework.authtoken.models import Token
+
+from django.conf import settings
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from rest_framework.authtoken.models import Token
+
+@receiver(post_save, sender=settings.AUTH_USER_MODEL)
+def create_auth_token(sender, instance=None, created=False, **kwargs):
+    if created:
+        Token.objects.create(user=instance)
 
 class UserManager(auth_models.BaseUserManager):
 
@@ -15,7 +27,7 @@ class UserManager(auth_models.BaseUserManager):
         if not email:
             raise ValueError('Users must have an email address')
         if not user_id:
-            raise ValueError('Users must have a username')
+            raise ValueError('Users must have a user_id')
         user = self.model(
             user_id=user_id,
             email=self.normalize_email(email)
@@ -36,9 +48,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     user_id = models.CharField(_('username'), validators=[userid_regex], unique=True, max_length=50, blank=False)
     gender = models.SmallIntegerField(choices=GENDER_CHOICES,verbose_name='성별', blank=True, null=True)
     birth = models.IntegerField(verbose_name='생년월일6자리', blank=True, null=True)
-    skin_color = models.CharField(validators=[validate_comma_separated_integer_list], max_length=30, blank=True, verbose_name='피부톤')
-    face_point = models.CharField(validators=[validate_comma_separated_integer_list], max_length=30, blank=True, verbose_name='특징')
-    favorite_makeup = models.CharField(validators=[validate_comma_separated_integer_list], max_length=30, blank=True, verbose_name='관심있는 메이크업')
+    skin_color = models.CharField(validators=[int_list_validator], max_length=30, blank=True, verbose_name='피부톤', default='')
+    face_point = models.CharField(validators=[int_list_validator], max_length=30, blank=True, verbose_name='특징', default='')
+    favorite_makeup = models.CharField(validators=[int_list_validator], max_length=30, blank=True, verbose_name='관심있는 메이크업', default='')
     is_staff = models.BooleanField(default=False, verbose_name='스태프 권한')
     is_active = models.BooleanField(default=True, verbose_name='활성', help_text='이 사용자가 활성화되어 있는지를 나타냅니다. 계정을 삭제하는 대신 이것을 선택 해제하세요.')
     date_joined = models.DateTimeField(auto_now_add=True, verbose_name='가입일')
@@ -48,6 +60,8 @@ class User(AbstractBaseUser, PermissionsMixin):
                                         through='Follow',
                                         related_name='followers',
                                         symmetrical=False,)
+
+    is_block = models.BooleanField(default=False, verbose_name='계정차단')
     objects = UserManager()
 
     USERNAME_FIELD = 'user_id'
@@ -58,17 +72,20 @@ class User(AbstractBaseUser, PermissionsMixin):
         verbose_name_plural = '사용자 정보'
         ordering = ('-id', )
 
+    def get_user_token(self, user_pk):
+    	return Token.objects.get_or_create(user_id=user_pk)
+
+    def __str__(self):
+        return u'{0} ({1})'.format(self.user_id, self.id)
+
     def __unicode__(self):
-        return u'{0} ({1})'.format(self.user_id(), self.email)
+        return u'{0} ({1})'.format(self.user_id, self.email)
 
     def get_user_id(self):
         return self.user_id
 
-    def email_user(self, subject, message, from_email=None, **kwargs):
-        """
-        Sends an email to this User.
-        """
-        #send_mail(subject, message, from_email, [self.email], **kwargs)
+    def profile_picture(self):
+        return self.userprofile
 
     @property
     def get_follower(self):
@@ -92,13 +109,20 @@ class User(AbstractBaseUser, PermissionsMixin):
     def is_following(self, user):
         return user in self.get_following
 
+    def like_count(self):
+        try:
+            likecount= post_models.LikeCount.objects.get(user=self.id)
+            return likecount.like_count
+        except:
+            return 0
+
 def user_path(instance, filename):
     from random import choice
     import string
     arr = [choice(string.ascii_letters) for _ in range(8)]
     pid = ''.join(arr)
     extension = filename.split('.')[-1]
-    return 'accounts/{}/{}.{}'.format(instance.user.user_id, pid, extension)
+    return 'accounts/{}/{}.{}'.format(instance.user.pk, pid, extension)
 
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='userprofile')
@@ -108,7 +132,11 @@ class Profile(models.Model):
                                   options={'quality': 90},
                                   blank=True,
                                   )
+    profile_time = models.DateTimeField(auto_now=True)
 
+    def delete(self, *args, **kwargs):
+        self.picture.delete()
+        super(Profile, self).delete(*args, **kwargs)
 
 class Follow(models.Model):
     following = models.ForeignKey(User, related_name='follow_user', on_delete=models.CASCADE)
@@ -122,60 +150,18 @@ class Follow(models.Model):
         unique_together = (
             ('following', 'follower')
         )
+        verbose_name = '팔로우'
+        verbose_name_plural = '팔로우'
 
-import binascii
-import os
-from django.db import models
-from django.utils.translation import ugettext_lazy as _
+class Push(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='userpush', unique=True)
+    follow_push = models.SmallIntegerField(choices=FOLLOW_PUSH_CHOICES, verbose_name='내가 팔로우 하는 사람', default=0)
+    comment_push = models.SmallIntegerField(choices=COMMENT_PUSH_CHOICES, verbose_name='내 댓글', default=0)
+    push_time = models.DateTimeField(auto_now=True)
 
-class ResetPasswordToken(models.Model):
+    def user_id(self):
+        self.user.user_id
+        
     class Meta:
-        verbose_name = _("Password Reset Token")
-        verbose_name_plural = _("Password Reset Tokens")
-
-    @staticmethod
-    def generate_key():
-        """ generates a pseudo random code using os.urandom and binascii.hexlify """
-        return binascii.hexlify(os.urandom(32)).decode()
-
-    id = models.AutoField(
-        primary_key=True
-    )
-
-    user = models.ForeignKey(
-        User,
-        related_name='ResetPasswordToken',
-        on_delete=models.CASCADE,
-        verbose_name=_("The User which is associated to this password reset token")
-    )
-
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name=_("When was this token generated")
-    )
-
-    # Key field, though it is not the primary key of the model
-    key = models.CharField(
-        _("Key"),
-        max_length=64,
-        db_index=True,
-        unique=True
-    )
-
-    ip_address = models.GenericIPAddressField(
-        _("The IP address of this session"),
-        default="127.0.0.1"
-    )
-    user_agent = models.CharField(
-        max_length=256,
-        verbose_name=_("HTTP User Agent"),
-        default=""
-    )
-
-    def save(self, *args, **kwargs):
-        if not self.key:
-            self.key = self.generate_key()
-        return super(ResetPasswordToken, self).save(*args, **kwargs)
-
-    def __str__(self):
-        return "Password reset token for user {user}".format(user=self.user)
+        verbose_name = '알림'
+        verbose_name_plural = '알림'

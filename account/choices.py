@@ -39,6 +39,15 @@ MAKEUP_CHOICES = (
     (6, "아이라인"),
 )
 
+FOLLOW_PUSH_CHOICES = (
+    (0, "OFF"),
+    (1, "ON"),
+)
+
+COMMENT_PUSH_CHOICES = (
+    (0, "OFF"),
+    (1, "ON"),
+)
 
 
 

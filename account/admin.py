@@ -8,15 +8,25 @@ class ProfileInline(admin.StackedInline):
     can_delete = False
     verbose_name_plural = 'profile'
 
-@admin.register(Profile)
+#@admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
     list_display = ['id',  'user']
     list_display_links = ['user']
 #    inlines = [FollowInline, ]
 
+@admin.register(Push)
+class PushAdmin(admin.ModelAdmin):
+    list_display = ['user_id', 'user',  'follow_push',  'comment_push']
+    list_display_links = ['user']
+    list_filter = ('follow_push', 'comment_push')
+    search_fields = ('user__user_id',)
+
 class FollowInline(admin.TabularInline):
     model = Follow
     fk_name = 'following'
+
+class PushInline(admin.TabularInline):
+    model = Push
 
 @admin.register(Follow)
 class FollowAdmin(admin.ModelAdmin):
@@ -37,7 +47,7 @@ class UserAdmin(auth_admin.UserAdmin):
     fieldsets = (
         (None, {'fields': ('email', 'password', 'user_id')}),
         ('개인 정보', {'fields': ('user_type', 'gender', 'birth', 'skin_color', 'face_point', 'favorite_makeup')}),
-        ('권한', {'fields': ('is_active', 'is_staff', 'is_superuser')}),
+        ('권한', {'fields': ('is_active','is_block', 'is_staff', 'is_superuser')}),
         ('Important dates', {'fields': ('date_joined', 'last_login')}),
     )
     limited_fieldsets = (
@@ -52,17 +62,13 @@ class UserAdmin(auth_admin.UserAdmin):
         ),
     )
 
-    list_display = ('user_id', 'email', 'user_type', 'gender', 'birth', 'is_active',  'date_joined')
-    list_filter = ('is_staff', 'is_superuser', 'groups')
+    list_display = ('id', 'user_id', 'email', 'user_type', 'gender', 'birth', 'is_active','is_block',  'date_joined')
+    list_filter = ('is_block', 'is_active')
+    list_display_links = ['user_id']
     search_fields = ('user_id', 'email', 'user_type')
     ordering = ('-date_joined',)
     readonly_fields = ('last_login', 'date_joined',)
-    inlines = (ProfileInline,FollowInline, )
+    inlines = (ProfileInline, PushInline, FollowInline, )
 
 admin.site.register(User, UserAdmin)
-
-class ResetPasswordTokenAdmin(admin.ModelAdmin):
-    list_display = ('user', 'key', 'created_at', 'ip_address', 'user_agent')
-
-admin.site.register(ResetPasswordToken, ResetPasswordTokenAdmin)
 
