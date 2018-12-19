@@ -6,10 +6,11 @@ from rest_framework import viewsets
 from rest_framework import mixins
 from .serializers import *
 from django.http import Http404
-from rest_framework import generics
 from rest_framework import filters
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from rest_framework.generics import ListAPIView, CreateAPIView, RetrieveAPIView
 from django.core.exceptions import PermissionDenied
 class PostViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
     """
@@ -29,6 +30,7 @@ class PostViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
         self.filter_backends = (DjangoFilterBackend,)
         self.filter_fields = ('user', 'share')
 
+        user = self.request.user
         if tag:
             queryset = Post.objects.filter(tag_set__name__iexact=tag)
         else:
@@ -51,8 +53,7 @@ class PostViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
             data = serializer.data
             return self.get_paginated_response(data)
 
-
-        serializer = PostGetSerializer(queryset, many=True)
+        serializer = PostGetSerializer(queryset, context={'request': request}, many=True)
         return Response({
             "result": 1,
             "message": 'Post all recods.',
@@ -64,7 +65,7 @@ class PostViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
         if request.data.get('complete_image') is None:
             data = {
                 "result": -1,
-                "msg": '이미지 데이터가 없습니다.'
+                "message": 'complete_image 가 없습니다.'
             }
             return Response(data, status=status.HTTP_401_UNAUTHORIZED)
 
@@ -74,7 +75,7 @@ class PostViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
             # raise PermissionDenied
             data = {
                 "result": -2,
-                "msg": "메이크업 카드를 만들려면 로그인이 필요합니다.",
+                "message": "메이크업 카드를 만들려면 로그인이 필요합니다.",
             }
             return Response(data, status=status.HTTP_404_NOT_FOUND)
 
@@ -84,6 +85,7 @@ class PostViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
         Post_serializer = self.get_serializer(data=data)
         if Post_serializer.is_valid():
             step_data = self.request.data.get("step")
+
             if step_data is None:
                 Post_serializer.save()
             else:
@@ -105,25 +107,88 @@ class PostViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
     def get_object(self, pk, user):
         try:
             post = Post.objects.get(pk=pk)
-            if int(user) == post.user.pk:
+            if user == post.user.pk:
                 return post
             elif post.share == 1:
                 return post
             else:
-                raise Http404
+                data = {
+                    "result": 0,
+                    "message": "해당 메이크업카드가 없습니다."
+                }
+                raise serializers.ValidationError(data)
         except Post.DoesNotExist:
-            raise Http404
+            data = {
+                "result": 0,
+                "message": "헤당 메이크업카드가 없습니다."
+            }
+            raise serializers.ValidationError(data)
 
     def retrieve(self, request, pk=None):
         user = self.request.query_params.get('user', None)
         Post = self.get_object(pk, user)
         serializer = self.get_serializer(Post)
+
+        return Response({
+            "result": 1,
+            "data": serializer.data
+        })
+
         return Response(serializer.data)
 
-class PostMyViewSet(viewsets.GenericViewSet,
-                     mixins.ListModelMixin):
+    def update(self, request, pk=None):
+        user = request.user
+        if not user.is_authenticated:
+            data = {"result": -1, "message": '등록된 아이디가 없습니다.'}
+            raise serializers.ValidationError(data)
+
+        queryset = get_object_or_404(Post, pk=pk)
+
+        if user.pk != queryset.user.pk:
+            data = {"result": -2, "message": '작성자만 수정 가능합니다.'}
+            raise serializers.ValidationError(data)
+
+        step_data = self.request.data.get("step", None)
+        serializer = PostSerializer(queryset, data=request.data, partial=True)
+        if serializer.is_valid():
+            if step_data is None:
+                serializer.save()
+            else:
+                serializer.save(step=step_data)
+            data = {
+                "result": 1,
+                "data": serializer.data
+            }
+        else:
+            data = {
+                "result": 0,
+                "message": serializer.errors
+            }
+
+        return Response(data, status=status.HTTP_200_OK)
+
+    def delete(self, request, pk=None):
+        user = request.user
+        if not user.is_authenticated:
+            data = {"result": -1, "message": '등록된 아이디가 없습니다.'}
+            raise serializers.ValidationError(data)
+
+        post = get_object_or_404(Post, pk=pk)
+
+        if user.pk != post.user.pk:
+            data = {"result": -2, "message": '작성자만 삭제 가능합니다.'}
+            raise serializers.ValidationError(data)
+
+        post.delete()
+        data = {
+            "result": 1,
+            "message": "success"
+        }
+        return Response(data, status=status.HTTP_200_OK)
+
+class PostMyList(ListAPIView):
     """
-        METHOD : POST
+        METHOD : GET
         파라미터
     """
 
@@ -135,7 +200,7 @@ class PostMyViewSet(viewsets.GenericViewSet,
             raise serializers.ValidationError(data)
 
         queryset = self.filter_queryset(Post.objects.filter(user=user))
-        serializer = PostSerializer(queryset, many=True)
+        serializer = PostSerializer(queryset, context={'request': request}, many=True)
 
         return Response({
             "result": 0,
@@ -203,7 +268,7 @@ class BookmarkSet(APIView):
             data = {'message': '북마크 취소', 'result': 0}
         return Response(data, status=status.HTTP_200_OK)
 
-class PostDetailList(generics.ListAPIView):
+class PostDetailList(ListAPIView):
 
     serializer_class = PostSerializer
 
@@ -226,7 +291,7 @@ class PostDetailList(generics.ListAPIView):
 
         return queryset
 
-class FollowPostList(generics.ListAPIView):
+class FollowPostList(ListAPIView):
 
     serializer_class = PostGetSerializer
 
@@ -238,7 +303,7 @@ class FollowPostList(generics.ListAPIView):
 
         return queryset
 
-class LikePostList(generics.ListAPIView):
+class LikePostList(ListAPIView):
 
     serializer_class = PostGetSerializer
 
@@ -251,7 +316,7 @@ class LikePostList(generics.ListAPIView):
 
         queryset = Post.objects.filter(like__user=user, share=1)
 
-        serializer = self.serializer_class(queryset, many=True)
+        serializer = self.serializer_class(queryset,  context={'request': request}, many=True)
         return Response({
             "result": 1,
             "message": 'Post like recods.',
@@ -259,7 +324,7 @@ class LikePostList(generics.ListAPIView):
         })
 
 
-class BookmarkPostList(generics.ListAPIView):
+class BookmarkPostList(ListAPIView):
 
     serializer_class = PostGetSerializer
 
@@ -271,7 +336,7 @@ class BookmarkPostList(generics.ListAPIView):
 
         queryset = Post.objects.filter(bookmark__user=user, share=1)
 
-        serializer = self.serializer_class(queryset, many=True)
+        serializer = self.serializer_class(queryset, context={'request': request}, many=True)
         return Response({
             "result": 1,
             "message": 'Post bookmark recods.',
@@ -294,7 +359,7 @@ class StepViewSet(viewsets.GenericViewSet,
         queryset = Step.objects.filter(post=request.GET.get("post"))
         serializer = self.get_serializer(queryset, many=True)
         return Response({
-            "result": 0,
+            "result": 1,
             "message": 'Post all recods.',
             "data": serializer.data
         })
@@ -318,3 +383,87 @@ class StepViewSet(viewsets.GenericViewSet,
         Step = self.get_object(pk)
         serializer = PostSerializer(Post)
         return Response(serializer.data)
+
+class CommentCreateAPIView(CreateAPIView):
+
+    queryset = Comment.objects.all()
+    def get_serializer_class(self):
+
+        user = self.request.user
+        if not user.is_authenticated:
+            data = {"result": -1, "message": '등록된 아이디가 없습니다.'}
+            raise serializers.ValidationError(data)
+
+        parent_id = self.request.GET.get("parent_id", None)
+
+        return create_comment_serializer(
+                parent_id=parent_id,
+                user=user
+                )
+
+class CommentListAPIView(ListAPIView):
+
+    serializer_class = CommentSerializer
+
+    def get_queryset(self, *args, **kwargs):
+        step = self.request.GET.get("step")
+        queryset = Comment.objects.filter(Q(step=step) & Q(parent=None))
+        serializer = self.serializer_class(queryset, many=True)
+        return Response({
+            "result": 1,
+            "data": serializer.data
+        })
+
+    def get_object(self, pk, user):
+        try:
+            comment = Comment.objects.get(pk=pk)
+            return comment
+        except Comment.DoesNotExist:
+            raise Http404
+
+    def retrieve(self, request, pk=None):
+        comment = self.get_object(pk)
+        serializer = PostSerializer(comment)
+        return Response(serializer.data)
+
+    def update(self, request, pk=None):
+        queryset = get_object_or_404(Post, pk=pk)
+        serializer = PostSerializer(queryset, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            data = {
+                "result": 1,
+                "data": serializer.data
+            }
+        else:
+            data = {
+                "result": 0,
+                "message": serializer.errors
+            }
+
+        return Response(data, status=status.HTTP_200_OK)
+
+
+    def delete(self, request, pk=None):
+        comment = self.get_object(pk, self.request.user)
+        comment.delete()
+        data = {
+            "result": 1,
+            "message": "success"
+        }
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class BannerListAPIView(ListAPIView):
+
+    serializer_class = BannerSerializer
+
+    def list(self, *args, **kwargs):
+        queryset = Banner.objects.all()
+        serializer = self.serializer_class(queryset, many=True)
+        return Response({
+            "result": 1,
+            "data": serializer.data
+        })
+
+
