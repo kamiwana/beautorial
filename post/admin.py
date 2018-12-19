@@ -8,9 +8,6 @@ class TagAdmin(admin.ModelAdmin):
 class StepInline(admin.TabularInline):
     model = Step
 
-class StepDetailInline(admin.TabularInline):
-    model = StepDetail
-
 class LikeInline(admin.TabularInline):
     model = Like
 
@@ -45,13 +42,13 @@ class CommentInline(admin.TabularInline):
 class Stepdmin(admin.ModelAdmin):
     # inlines = [CosmeticInline]
     # Post 객체를 보여줄 때 출력할 필드 설정
-    list_display = ('post', 'title', 'step_detail_count', 'create_date')
+    list_display = ('id', 'post', 'title', 'create_date')
     # 필터링 항목 설정
     list_filter = ('title',)
     # 객체 검색 필드 설정
     search_fields = ('title',)
 
-    inlines = [StepDetailInline, CommentInline]
+    inlines = [CommentInline]
 
 class StepDetailadmin(admin.ModelAdmin):
   list_display = ('step', 'create_date')
@@ -67,9 +64,8 @@ class CommentAdmin(admin.ModelAdmin):
 @admin.register(Banner)
 class BannerAdmin(admin.ModelAdmin):
     # Post 객체를 보여줄 때 출력할 필드 설정
-    list_display = ('title', 'hashtag', 'modify_date')
+    list_display = ('title', 'hashtag', 'create_date', 'modify_date')
 
 admin.site.register(Post, PostAdmin)
 admin.site.register(Step, Stepdmin)
-admin.site.register(StepDetail, StepDetailadmin)
 
