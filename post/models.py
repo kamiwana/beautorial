@@ -5,7 +5,17 @@ from imagekit.models import ProcessedImageField
 from imagekit.processors import ResizeToFill
 from .choices import *
 import re
-from cosmetic import models as cosmetic_models
+from cosmetic import models as cosmetic_model
+from django.core.files.storage import FileSystemStorage
+
+class OverwriteStorage(FileSystemStorage):
+    def _save(self, name, content):
+        if self.exists(name):
+            self.delete(name)
+        return super(OverwriteStorage, self)._save(name, content)
+
+    def get_available_name(self, name, max_length=None):
+        return name
 
 def post_path(instance, filename):
     from random import choice
@@ -13,7 +23,7 @@ def post_path(instance, filename):
     arr = [choice(string.ascii_letters) for _ in range(8)]
     pid = ''.join(arr)
     extension = filename.split('.')[-1]
-    return 'post/{}/{}.{}'.format(instance.user.pk, pid, extension)
+    return 'post/{}.{}'.format(pid, extension)
 from django.utils.text import slugify
 import  itertools
 # Create your models here.
@@ -23,6 +33,8 @@ class Post(models.Model):
     # unique=True: 특정 포스트 검색 시, pk대신에 사용하기 위해 유니크하게..
     # allow_unicode=True: 한글처리 가능
     slug = models.SlugField(unique=True, allow_unicode=True, help_text='one word for title alias')
+    complete_image = models.ImageField(upload_to=post_path, blank=True, storage=OverwriteStorage())
+    complete_texture = models.ImageField(upload_to=post_path, blank=True, storage=OverwriteStorage(), verbose_name="AR")
     contents_text = models.TextField(verbose_name='CONTENT')
     # auto_now_add=True: 데이터가 생성될 때 생성시각 자동 입력
     create_date = models.DateTimeField(auto_now_add=True, verbose_name='등록일')
@@ -40,17 +52,7 @@ class Post(models.Model):
                                            related_name='bookmark_user_set',
                                            through='Bookmark')
 
-    comment_user_set = models.ManyToManyField(settings.AUTH_USER_MODEL,
-                                           blank=True,
-                                           related_name='comment_user_set',
-                                           through='Comment')
 
-    complete_image = ProcessedImageField(upload_to=post_path,
-                                  processors=[ResizeToFill(150, 150)],
-                                  format='JPEG',
-                                  options={'quality': 90},
-                                  blank=True,
-                                  )
 
 
     def save(self, force_insert=False, force_update=False, using=None, update_fields=None):
@@ -78,10 +80,9 @@ class Post(models.Model):
             self.tag_set.add(tag)  # NOTE: ManyToManyField 에 인스턴스 추가
 
     class Meta:
-        verbose_name = '메이크업카드'
-        verbose_name_plural = '메이크업카드'
+        verbose_name = '1. 메이크업카드'
+        verbose_name_plural = '1. 메이크업카드'
         db_table = 'my_post'
-        ordering = ('-modify_date',)
 
     def __str__(self):
         return self.title
@@ -115,83 +116,60 @@ class Post(models.Model):
         return self.steps.all().count()
 
     def comment_count(self):
-        return self.comment_user_set.count()
-
+        try:
+            comment_count = CommentCount.objects.get(post=self.pk)
+            return comment_count.count
+        except:
+            return 0
     def get_user_id(self):
-        return self.user.get_username()
+        return self.user.user_id
+
+    def get_user_pk(self):
+        return self.user.pk
 
     def get_is_following(self):
         return self.user.is_follower(self.user)
 
+def step_path(instance, filename):
+    from random import choice
+    import string
+    arr = [choice(string.ascii_letters) for _ in range(8)]
+    pid = ''.join(arr)
+    extension = filename.split('.')[-1]
+    return 'post/{}/{}.{}'.format(instance.post.pk, pid, extension)
 
 class Step(models.Model):
     post = models.ForeignKey(Post, related_name='steps', on_delete=models.CASCADE)
-   # user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     title = models.CharField(max_length=100, verbose_name='TITLE')
     index = models.SmallIntegerField()
+    object_index = models.SmallIntegerField()
+    contents_text = models.TextField(verbose_name='CONTENT')
+    snapshot_texture = models.ImageField(upload_to=step_path, blank=False, verbose_name='스냅샷',storage=OverwriteStorage())
+    ar_texture = models.ImageField(upload_to=step_path, blank=False, verbose_name='AR',
+                                         storage=OverwriteStorage())
+    create_date = models.DateTimeField(auto_now_add=True, verbose_name='등록일')
+    modify_date = models.DateTimeField(auto_now=True, verbose_name='수정일')
     comment_step_set = models.ManyToManyField(settings.AUTH_USER_MODEL,
                                            blank=True,
                                            related_name='commnet_step_set',
                                            through='Comment')
 
-    step_detail_set = models.ManyToManyField('self',
-                                           blank=True,
-                                           related_name='step_detail',
-                                           through='StepDetail',
-                                           symmetrical=False,)
-
-    create_date = models.DateTimeField(auto_now_add=True, verbose_name='등록일')
+    product_step_set = models.ManyToManyField(cosmetic_model.Product, blank=False, verbose_name="메이크업 제품")
 
     class Meta:
-        verbose_name = 'step'
-        verbose_name_plural = 'steps'
+        verbose_name = '2. STEP'
+        verbose_name_plural = '2. STEP'
         db_table = 'post_step'
         ordering = ['index']
 
     def reply_count(self):
         return self.comment_step_set.count()
 
-    def get_step_detail(self):
-        return ",".join([str(p) for p in self.step_detail_set.all()])
-
-    def step_detail_count(self):
-        return self.step_details.count()
-
     def __str__(self):
-       return  self.post.title + self.title
+       return  str(self.pk) +'_'+ self.title
 
     def less_comments(self):
         return Comment.objects.all().filter(step=self).order_by("-id")[:100]
-
-def StepDetail_path(instance, filename):
-    from random import choice
-    import string
-    arr = [choice(string.ascii_letters) for _ in range(8)]
-    pid = ''.join(arr)
-    extension = filename.split('.')[-1]
-    return 'post/{}/{}/{}.{}'.format(instance.user.pk, instance.step.pk, pid, extension)
-
-class StepDetail(models.Model):
-  #  post = models.ForeignKey(Post, on_delete=models.CASCADE)
-  #  user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    step = models.ForeignKey(Step, related_name='step_details', on_delete=models.CASCADE)
-    product = models.ForeignKey(cosmetic_models.Product, related_name='products', on_delete=models.CASCADE)
-    contents_text = models.TextField(verbose_name='CONTENT')
-    create_date = models.DateTimeField(auto_now_add=True, verbose_name='등록일')
-    image = ProcessedImageField(upload_to=StepDetail_path,
-                                  processors=[ResizeToFill(150, 150)],
-                                  format='JPEG',
-                                  options={'quality': 90},
-                                  blank=True,
-                                  )
-    class Meta:
-        verbose_name = 'step_detail'
-        verbose_name_plural = 'steps_detail'
-        db_table = 'post_step_detail'
-
-
-    def __str__(self):
-       return 'StepDetail: ' + self.step.title
 
 class Comment(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE)
@@ -199,6 +177,8 @@ class Comment(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     comment_content = models.CharField(max_length=200, verbose_name="내용")
     create_date = models.DateTimeField(auto_now_add=True, verbose_name='등록일')
+    parent = models.ForeignKey('self', null=True, blank=True, related_name='replies', on_delete=models.CASCADE)
+
 
     def __str__(self):
         return self.comment_content
@@ -206,12 +186,26 @@ class Comment(models.Model):
     def comment_user_id(self):
         return self.user.user_id
 
+    @property
+    def is_parent(self):
+        if self.parent is not None:
+            return False
+        return True
+
+    def children(self): #replies
+        return Comment.objects.filter(parent=self)
+
     class Meta:
         db_table = 'step_comment'
         ordering = ['-create_date']
-        verbose_name = '댓글'
-        verbose_name_plural = '댓글'
-        
+        verbose_name = '3. 댓글'
+        verbose_name_plural = '3. 댓글'
+
+
+    def save(self, force_insert=False, force_update=False, using=None, update_fields=None):
+
+        super().save(force_insert, force_update, using, update_fields)
+
 class Tag(models.Model):
     name = models.CharField(max_length=140, unique=True)
 
@@ -219,8 +213,8 @@ class Tag(models.Model):
         return self.name
     
     class Meta:
-        verbose_name = '태그'
-        verbose_name_plural = '태그'
+        verbose_name = '6. 태그'
+        verbose_name_plural = '6. 태그'
         
 class Like(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
@@ -238,8 +232,8 @@ class Like(models.Model):
         )
 
     class Meta:
-        verbose_name = '좋아요'
-        verbose_name_plural = '좋아요'
+        verbose_name = '4. 좋아요'
+        verbose_name_plural = '4. 좋아요'
         
 class Bookmark(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
@@ -255,9 +249,9 @@ class Bookmark(models.Model):
             ('user', 'post')
         )
     class Meta:
-        verbose_name = '북마크'
-        verbose_name_plural = '북마크'
-
+        verbose_name = '5. 북마크'
+        verbose_name_plural = '5. 북마크'
+from django.urls import resolve
 class Banner(models.Model):
     title = models.CharField(max_length=50)
     image = models.ImageField(blank=True, null=True, verbose_name="이미지", upload_to="banner")
@@ -268,10 +262,28 @@ class Banner(models.Model):
     def __str__(self):
         return self.title
 
+    # 정의된 객체를 지칭하는 URL 반환
+    def get_absolute_url(self):
+        # namespace=posts, name=tag_list url을 reverse함수를 통해 생성
+        return reverse('posts:tag_list', args=(self.hashtag,))
+
+    class Meta:
+        verbose_name = '7. 배너'
+        verbose_name_plural = '7. 배너'
+        ordering = ['-create_date']
+        
 class LikeCount(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     like_count = models.IntegerField(default=0)
 
     class Meta:
-        verbose_name = '배너'
-        verbose_name_plural = '배너'
+        verbose_name = '좋아요_COUNT'
+        verbose_name_plural = '좋아요_COUNT'
+        
+class CommentCount(models.Model):
+    post = models.OneToOneField(Post, on_delete=models.CASCADE, unique=True)
+    count = models.IntegerField(default=1)
+
+    class Meta:
+        verbose_name = '댓글_COUNT'
+        verbose_name_plural = '댓글_COUNT'

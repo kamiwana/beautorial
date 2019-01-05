@@ -23,6 +23,7 @@ class LikeAdmin(admin.ModelAdmin):
 
     #search_fields = ('user',)
 
+@admin.register(Post)
 class PostAdmin(admin.ModelAdmin):
     # Post 객체를 보여줄 때 출력할 필드 설정
     list_display = ('id','title', 'user', 'step_count', 'modify_date')
@@ -39,6 +40,7 @@ class PostAdmin(admin.ModelAdmin):
 class CommentInline(admin.TabularInline):
     model = Comment
 
+@admin.register(Step)
 class Stepdmin(admin.ModelAdmin):
     # inlines = [CosmeticInline]
     # Post 객체를 보여줄 때 출력할 필드 설정
@@ -47,14 +49,7 @@ class Stepdmin(admin.ModelAdmin):
     list_filter = ('title',)
     # 객체 검색 필드 설정
     search_fields = ('title',)
-
     inlines = [CommentInline]
-
-class StepDetailadmin(admin.ModelAdmin):
-  list_display = ('step', 'create_date')
-
-  #exclude = ('cosmetic_set',)
-
 
 @admin.register(Comment)
 class CommentAdmin(admin.ModelAdmin):
@@ -66,6 +61,5 @@ class BannerAdmin(admin.ModelAdmin):
     # Post 객체를 보여줄 때 출력할 필드 설정
     list_display = ('title', 'hashtag', 'create_date', 'modify_date')
 
-admin.site.register(Post, PostAdmin)
-admin.site.register(Step, Stepdmin)
+
 

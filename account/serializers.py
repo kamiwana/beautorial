@@ -65,7 +65,7 @@ class AccountViewSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = get_user_model()
-        fields = ('id', 'user_id','profile_images', 'like_count', 'follower_count', 'following_count', 'is_following',
+        fields = ('id', 'user_id',  'profile_images', 'like_count', 'follower_count', 'following_count', 'is_following',
                    'skin_color', 'face_point', 'favorite_makeup', )
 
     def get_profile_images(self, obj):

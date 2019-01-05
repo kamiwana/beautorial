@@ -259,7 +259,7 @@ class ResetPassword(APIView):
             email_html_message = render_to_string('email/user_reset_password.html', context)
             # Create an e-mail
             email_message = EmailMultiAlternatives(
-                subject=_("BeauTOTAL에 문의하신 비밀번호 정보 입니다."),
+                subject=_("뷰토리얼에 문의하신 비밀번호 정보 입니다."),
                 body=email_html_message,
                 from_email=settings.EMAIL_HOST_USER,
                 to=[user.email]
@@ -405,13 +405,15 @@ class UserLogoutView(APIView):
             request.user.auth_token.delete()
         except (ObjectDoesNotExist, AttributeError):
             content = {
-                "detail": "토큰이 존재하지 않습니다."
+            "result": 0,
+            "message": "토큰이 존재하지 않습니다."
             }
            # django_logout(request)
             return Response(content, status=status.HTTP_200_OK)
             # django_logout(request)
         content = {
-            "detail": "성공적으로 로그아웃되었습니다.",
+            "result": 1,
+            "message": "성공적으로 로그아웃되었습니다.",
         }
         return Response(content, status=status.HTTP_200_OK)
 

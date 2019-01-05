@@ -19,11 +19,9 @@ class user_idOrEmailBackend(object):
 
 from rest_framework import exceptions
 from django.contrib.auth import get_user_model
-import jwt
 import time
 
 User = get_user_model()
-JWT_SECRET = 'beautorial'
 
 
 def get_authorization_header(request):

@@ -36,30 +36,26 @@ class CommaSeparatedSelectInteger(forms.MultipleChoiceField):
     def prepare_value(self, value):
         """ Convert the string of comma separated integers in list"""
         if value in validators.EMPTY_VALUES:
-            return ''
+            return 1
         elif isinstance(value, (list, tuple)):
             return ','.join([str(val) for val in value])
         else:
             return value.split(',')
 
 class BrandForm(forms.ModelForm):
-    category = CommaSeparatedSelectInteger(
-        choices=CATEGORY_CHOICES,
-        widget=forms.CheckboxSelectMultiple(attrs={'class': 'checkbox-inline'}),
-        required=False,
-    )
 
     class Meta:
         model = Brand
         fields = '__all__'
 
-
 class ProductForm(forms.ModelForm):
+
     texture = CommaSeparatedSelectInteger(
         choices=TEXTURE_CHOICES,
         widget=forms.CheckboxSelectMultiple(attrs={'class': 'checkbox-inline'}),
         required=False,
     )
+
 
     class Meta:
         model = Product

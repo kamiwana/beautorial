@@ -82,15 +82,9 @@ class PostViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
         data = request.data
         data['user'] = user.pk
 
-        Post_serializer = self.get_serializer(data=data)
+        Post_serializer = PostActionSerializer(data=data)
         if Post_serializer.is_valid():
-            step_data = self.request.data.get("step")
-
-            if step_data is None:
-                Post_serializer.save()
-            else:
-                Post_serializer.save(step=step_data)
-
+            Post_serializer.save()
             data = {
                 "result": 1,
                 "message": "메이크업 카드 저장 성공 ",
@@ -148,13 +142,9 @@ class PostViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
             data = {"result": -2, "message": '작성자만 수정 가능합니다.'}
             raise serializers.ValidationError(data)
 
-        step_data = self.request.data.get("step", None)
-        serializer = PostSerializer(queryset, data=request.data, partial=True)
+        serializer = PostActionSerializer(queryset, data=request.data, partial=True)
         if serializer.is_valid():
-            if step_data is None:
-                serializer.save()
-            else:
-                serializer.save(step=step_data)
+            serializer.save()
             data = {
                 "result": 1,
                 "data": serializer.data
@@ -203,7 +193,7 @@ class PostMyList(ListAPIView):
         serializer = PostSerializer(queryset, context={'request': request}, many=True)
 
         return Response({
-            "result": 0,
+            "result": 1,
             "data": serializer.data
         })
 
@@ -365,12 +355,58 @@ class StepViewSet(viewsets.GenericViewSet,
         })
 
     def post(self, request, *args, **kwargs):
-        Step_serializer = StepSerializer(self.queryset, data=request.data)
+
+        user = request.user
+        if not user.is_authenticated:
+            data = {"result": -1, "message": '등록된 아이디가 없습니다.'}
+            raise serializers.ValidationError(data)
+
+        Step_serializer = StepSerializer(data=request.data)
         if Step_serializer.is_valid():
-            Step_serializer.save()
-            return Response(Step_serializer.data, status=status.HTTP_201_CREATED)
+            product_step_set = self.request.data.get("product_step_set")
+            Step_serializer.save(product_step_set=product_step_set)
+            return Response({
+                "result": 1,
+                "message": 'success',
+                "data": Step_serializer.data
+            }, status=status.HTTP_201_CREATED)
         else:
-            return Response(Step_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                "result": 0,
+                "message": 'fail',
+                "data": Step_serializer.errors
+            },status=status.HTTP_400_BAD_REQUEST)
+
+
+    def update(self, request, pk=None):
+
+        user = request.user
+        if not user.is_authenticated:
+            data = {"result": -1, "message": '등록된 아이디가 없습니다.'}
+            raise serializers.ValidationError(data)
+
+        queryset = get_object_or_404(Step, pk=pk)
+
+        if user.pk != queryset.post.user.pk:
+            data = {"result": -2, "message": '작성자만 수정 가능합니다.'}
+            raise serializers.ValidationError(data)
+
+        serializer = StepSerializer(queryset, data=request.data, partial=True)
+        if serializer.is_valid():
+            product_step_set = self.request.data.get("product_step_set")
+            serializer.save(product_step_set=product_step_set)
+
+            data = {
+                "result": 1,
+                "data": serializer.data
+            }
+        else:
+            data = {
+                "result": 0,
+                "message": serializer.errors
+            }
+
+        return Response(data, status=status.HTTP_200_OK)
 
     def get_object(self, pk, user):
         try:
@@ -383,6 +419,25 @@ class StepViewSet(viewsets.GenericViewSet,
         Step = self.get_object(pk)
         serializer = PostSerializer(Post)
         return Response(serializer.data)
+
+    def delete(self, request, pk=None):
+        user = request.user
+        if not user.is_authenticated:
+            data = {"result": -1, "message": '등록된 아이디가 없습니다.'}
+            raise serializers.ValidationError(data)
+
+        step = get_object_or_404(Step, pk=pk)
+
+        if user.pk != step.post.user.pk:
+            data = {"result": -2, "message": '작성자만 삭제 가능합니다.'}
+            raise serializers.ValidationError(data)
+
+        step.delete()
+        data = {
+            "result": 1,
+            "message": "success"
+        }
+        return Response(data, status=status.HTTP_200_OK)
 
 class CommentCreateAPIView(CreateAPIView):
 
@@ -401,11 +456,12 @@ class CommentCreateAPIView(CreateAPIView):
                 user=user
                 )
 
-class CommentListAPIView(ListAPIView):
+class CommentViewSet(viewsets.GenericViewSet,
+                      mixins.ListModelMixin):
 
     serializer_class = CommentSerializer
 
-    def get_queryset(self, *args, **kwargs):
+    def list(self, *args, **kwargs):
         step = self.request.GET.get("step")
         queryset = Comment.objects.filter(Q(step=step) & Q(parent=None))
         serializer = self.serializer_class(queryset, many=True)
@@ -414,7 +470,7 @@ class CommentListAPIView(ListAPIView):
             "data": serializer.data
         })
 
-    def get_object(self, pk, user):
+    def get_object(self, pk):
         try:
             comment = Comment.objects.get(pk=pk)
             return comment
@@ -427,8 +483,19 @@ class CommentListAPIView(ListAPIView):
         return Response(serializer.data)
 
     def update(self, request, pk=None):
-        queryset = get_object_or_404(Post, pk=pk)
-        serializer = PostSerializer(queryset, data=request.data, partial=True)
+        
+        user = request.user
+        if not user.is_authenticated:
+            data = {"result": -1, "message": '등록된 아이디가 없습니다.'}
+            raise serializers.ValidationError(data)
+
+        comment = get_object_or_404(Comment, pk=pk)
+
+        if user.pk != comment.user.pk:
+            data = {"result": -2, "message": '작성자만 수정 가능합니다.'}
+            raise serializers.ValidationError(data)
+
+        serializer = CommentSerializer(comment, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
             data = {
@@ -443,16 +510,39 @@ class CommentListAPIView(ListAPIView):
 
         return Response(data, status=status.HTTP_200_OK)
 
-
     def delete(self, request, pk=None):
-        comment = self.get_object(pk, self.request.user)
+
+        user = request.user
+        if not user.is_authenticated:
+            data = {"result": -1, "message": '등록된 아이디가 없습니다.'}
+            raise serializers.ValidationError(data)
+
+        comment = self.get_object(pk)
+
+        if user.pk != comment.user.pk:
+            data = {"result": -2, "message": '작성자만 삭제 가능합니다.'}
+            raise serializers.ValidationError(data)
+
+        children_count = Comment.objects.filter(parent_id=pk).count()
+        comment_count = CommentCount.objects.get(post=comment.post)
+
+        if comment_count.count > 0:
+            count = comment_count.count - children_count - 1
+        else:
+            count = 0
+
+        CommentCount.objects.filter(post=comment.post).update(
+            count=count
+        )
+
         comment.delete()
+
         data = {
             "result": 1,
-            "message": "success"
+            "message": "success",
+            "count": count
         }
         return Response(data, status=status.HTTP_200_OK)
-
 
 class BannerListAPIView(ListAPIView):
 
@@ -465,5 +555,3 @@ class BannerListAPIView(ListAPIView):
             "result": 1,
             "data": serializer.data
         })
-
-

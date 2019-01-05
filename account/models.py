@@ -68,8 +68,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     REQUIRED_FIELDS = ['email']
 
     class Meta:
-        verbose_name = '사용자 정보'
-        verbose_name_plural = '사용자 정보'
+        verbose_name = '1. 사용자 정보'
+        verbose_name_plural = '1. 사용자 정보'
         ordering = ('-id', )
 
     def get_user_token(self, user_pk):
@@ -150,8 +150,8 @@ class Follow(models.Model):
         unique_together = (
             ('following', 'follower')
         )
-        verbose_name = '팔로우'
-        verbose_name_plural = '팔로우'
+        verbose_name = '2. 팔로우'
+        verbose_name_plural = '2. 팔로우'
 
 class Push(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='userpush', unique=True)
@@ -163,5 +163,5 @@ class Push(models.Model):
         self.user.user_id
         
     class Meta:
-        verbose_name = '알림'
-        verbose_name_plural = '알림'
+        verbose_name = '3. 알림'
+        verbose_name_plural = '3. 알림'
