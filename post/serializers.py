@@ -150,7 +150,6 @@ class PostGetSerializer(serializers.HyperlinkedModelSerializer):
     is_following = serializers.SerializerMethodField()
     profile_images = serializers.SerializerMethodField()
 
-
     class Meta:
         model = Post
         fields = ('pk', 'get_user_pk', 'get_user_id', 'profile_images', 'is_following', 'step_count', 'like_count',
@@ -158,21 +157,24 @@ class PostGetSerializer(serializers.HyperlinkedModelSerializer):
                             'modify_date', 'share')
 
     def get_is_following(self, obj):
-        user = self.context['request'].user
-        if user.pk is None or user == obj.user:
-            return 0
-        else:
-            if user.is_following(obj.user):
-                return 1
-            else:
+        try:
+            user = self.context['request'].user
+            if user.pk is None or user == obj.user:
                 return 0
+            else:
+                if user.is_following(obj.user):
+                    return 1
+                else:
+                    return 0
+        except:
+            return 0
 
     def get_profile_images(self, obj):
+        try:
             request = self.context['request']
-            try:
-                return request.build_absolute_uri(obj.user.userprofile.picture.url)
-            except:
-                return
+            return request.build_absolute_uri(obj.user.userprofile.picture.url)
+        except:
+            return
 
 class PostActionSerializer(serializers.ModelSerializer):
 
@@ -270,12 +272,30 @@ class CommentListSerializer(serializers.ModelSerializer):
             'create_date',
         ]
 
+class PostMakeTagSerializer(serializers.HyperlinkedModelSerializer):
+
+    complete_image = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Post
+        fields = ('pk', 'get_user_pk', 'get_user_id', 'title', 'contents_text', 'complete_image')
+
+    def get_complete_image(self, obj):
+        request = self.context['request']
+        return request.build_absolute_uri(obj.complete_image.url)
+
+class MakeTagSerializer(serializers.ModelSerializer):
+    post = PostMakeTagSerializer(required=False)
+
+    class Meta:
+        model = MakeTag
+        fields = ('tag', 'tag_color_code', 'index', 'modify_date', 'post')
+
 class BannerSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Banner
         fields = ('title', 'image', 'hashtag', 'modify_date')
-
 
 class StepSerializer_back(serializers.HyperlinkedModelSerializer):
     products = ProductSerializer(many=True, required=False)

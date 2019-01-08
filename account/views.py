@@ -1,16 +1,16 @@
 from rest_framework.decorators import api_view
 from rest_framework.views import APIView
 from rest_framework import generics
+from rest_framework import status
+from rest_framework.response import Response
 from django.db.models import Q
 from django.template.loader import render_to_string
 from django.utils.translation import ugettext as _
 from django.core.mail import EmailMultiAlternatives
-from django.conf import settings
 from django.shortcuts import get_object_or_404
+
 from .serializers import *
 from .models import *
-from rest_framework import status
-from rest_framework.response import Response
 
 @api_view(["POST"])
 def login(request):

@@ -4,14 +4,16 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework import viewsets
 from rest_framework import mixins
-from .serializers import *
-from django.http import Http404
+from rest_framework.decorators import api_view
+from rest_framework.generics import ListAPIView, CreateAPIView, RetrieveAPIView
 from rest_framework import filters
+from django.http import Http404
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
-from rest_framework.generics import ListAPIView, CreateAPIView, RetrieveAPIView
+from .serializers import *
 from django.core.exceptions import PermissionDenied
+
 class PostViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
     """
         METHOD : POST
@@ -23,7 +25,7 @@ class PostViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
 
     serializer = serializer_class(queryset, many=True)
 
-    def list(self, request, tag=None):
+    def list(self, request, tag=None, cnt=None, beauty=None):
 
         self.filter_backends = (filters.SearchFilter,)
         self.search_fields = ('context',)
@@ -33,6 +35,14 @@ class PostViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
         user = self.request.user
         if tag:
             queryset = Post.objects.filter(tag_set__name__iexact=tag)
+        elif cnt:
+            queryset = Post.objects.filter(share=1)[:3]
+        elif beauty:
+            if user.pk is None:
+                return Response({"result": 0})
+            else:
+                aa = user.skin_color_display()
+                queryset = Post.objects.filter(tag_set__name__in=['깨끗', '투명'])[:1]
         else:
             queryset = self.filter_queryset(Post.objects.filter(share=1))
 
@@ -176,6 +186,19 @@ class PostViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
         }
         return Response(data, status=status.HTTP_200_OK)
 
+@api_view(['GET'])
+def my_beauty_post(request):
+    #user = request.get('user', None)
+    queryset = Post.objects.filter(tag_set__name__in=['깨끗', '투명'])[:1]
+    serializer = PostGetSerializer(queryset)
+
+    return Response({
+        "result": 1,
+        "data": serializer.data
+    })
+
+    return Response(serializer.data)
+
 class PostMyList(ListAPIView):
     """
         METHOD : GET
@@ -306,7 +329,7 @@ class LikePostList(ListAPIView):
 
         queryset = Post.objects.filter(like__user=user, share=1)
 
-        serializer = self.serializer_class(queryset,  context={'request': request}, many=True)
+        serializer = self.serializer_class(queryset, context={'request': request}, many=True)
         return Response({
             "result": 1,
             "message": 'Post like recods.',
@@ -551,6 +574,18 @@ class BannerListAPIView(ListAPIView):
     def list(self, *args, **kwargs):
         queryset = Banner.objects.all()
         serializer = self.serializer_class(queryset, many=True)
+        return Response({
+            "result": 1,
+            "data": serializer.data
+        })
+
+class MakeTagListAPIView(ListAPIView):
+
+    serializer_class = MakeTagSerializer
+
+    def list(self, request, *args, **kwargs):
+        queryset = MakeTag.objects.all()
+        serializer = self.serializer_class(queryset, context={'request': request}, many=True)
         return Response({
             "result": 1,
             "data": serializer.data

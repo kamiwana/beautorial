@@ -7,6 +7,8 @@ from .choices import *
 import re
 from cosmetic import models as cosmetic_model
 from django.core.files.storage import FileSystemStorage
+from colorfield.fields import ColorField
+from django.utils.html import format_html
 
 class OverwriteStorage(FileSystemStorage):
     def _save(self, name, content):
@@ -52,9 +54,6 @@ class Post(models.Model):
                                            related_name='bookmark_user_set',
                                            through='Bookmark')
 
-
-
-
     def save(self, force_insert=False, force_update=False, using=None, update_fields=None):
         self.slug = slugify(self.title, allow_unicode=True)
 
@@ -83,6 +82,7 @@ class Post(models.Model):
         verbose_name = '1. 메이크업카드'
         verbose_name_plural = '1. 메이크업카드'
         db_table = 'my_post'
+        ordering = ['-create_date']
 
     def __str__(self):
         return self.title
@@ -287,3 +287,30 @@ class CommentCount(models.Model):
     class Meta:
         verbose_name = '댓글_COUNT'
         verbose_name_plural = '댓글_COUNT'
+
+class MakeTag(models.Model):
+    post = models.ForeignKey(Post, on_delete=models.CASCADE)
+    tag = models.CharField(max_length=30, verbose_name="태그명")
+    tag_color_code = ColorField(default='#FF0000', verbose_name='컬러값')
+    index = models.SmallIntegerField(verbose_name="순서")
+    modify_date = models.DateTimeField(auto_now=True, verbose_name='등록일')
+
+    def __str__(self):
+        return self.tag
+
+    def colored_name(self):
+        return format_html(
+            '<span style="color: #{};">{}</span>',
+            self.tag_color_code,
+            self.tag
+        )
+
+    def complete_image(self):
+        return self.post.complete_image.url
+
+    class Meta:
+        verbose_name = '8. 기획태그'
+        verbose_name_plural = '8. 기획태그'
+        ordering = ['index']
+
+    colored_name.short_description = '태그명'

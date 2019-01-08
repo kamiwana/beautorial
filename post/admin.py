@@ -61,5 +61,7 @@ class BannerAdmin(admin.ModelAdmin):
     # Post 객체를 보여줄 때 출력할 필드 설정
     list_display = ('title', 'hashtag', 'create_date', 'modify_date')
 
-
-
+@admin.register(MakeTag)
+class MakeTagAdmin(admin.ModelAdmin):
+    # Post 객체를 보여줄 때 출력할 필드 설정
+    list_display = ('id','colored_name', 'index', 'modify_date')
